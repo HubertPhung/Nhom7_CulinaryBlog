@@ -31,5 +31,6 @@ Thumbs.db
 # Containers
 docker-data/
 
-# Personal progress reports
-docs/W03_BO_AUTH_PROGRESS_2026-10-04.md
+# Personal progress reports and plans
+docs/fr-auth-bo/
+

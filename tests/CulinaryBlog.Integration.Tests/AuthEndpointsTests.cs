@@ -353,6 +353,83 @@ public sealed class AuthEndpointsTests : IClassFixture<AuthEndpointsTests.AuthEn
     }
 
     [Fact]
+    public async Task GetCurrentUserWhenUserNotFoundReturnsNotFound()
+    {
+        var client = CreateTestClient();
+        using var scope = _factory.Services.CreateScope();
+        var jwtService = scope.ServiceProvider.GetRequiredService<IJwtService>();
+        var token = jwtService.GenerateAccessToken("deleted-user-id", "deleted@culinary.test", "Deleted User", [Roles.Author]);
+
+        var meMsg = new HttpRequestMessage(HttpMethod.Get, new Uri("/api/v1/auth/me", UriKind.Relative));
+        meMsg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+
+        var meResponse = await client.SendAsync(meMsg);
+        Assert.Equal(HttpStatusCode.NotFound, meResponse.StatusCode);
+
+        var problem = await meResponse.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(problem);
+        Assert.Equal("USER_NOT_FOUND", problem.Type);
+    }
+
+    [Fact]
+    public async Task UpdateProfileWithValidDataReturnsUpdatedProfile()
+    {
+        var client = CreateTestClient();
+        var loginBody = new { email = "existing@culinary.test", password = GetTestCredential() };
+        var loginResponse = await client.PostAsJsonAsync(new Uri("/api/v1/auth/login", UriKind.Relative), loginBody);
+        var authDto = await loginResponse.Content.ReadFromJsonAsync<AuthResponseDto>();
+        Assert.NotNull(authDto);
+
+        var patchBody = new
+        {
+            displayName = "Master Chef",
+            avatarUrl = "https://cdn.culinary.test/avatar.png",
+            bio = "Expert in Mediterranean recipes.",
+        };
+        var patchMsg = new HttpRequestMessage(HttpMethod.Patch, new Uri("/api/v1/auth/me", UriKind.Relative))
+        {
+            Content = JsonContent.Create(patchBody),
+        };
+        patchMsg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authDto.AccessToken);
+
+        var patchResponse = await client.SendAsync(patchMsg);
+        Assert.Equal(HttpStatusCode.OK, patchResponse.StatusCode);
+
+        var updatedProfile = await patchResponse.Content.ReadFromJsonAsync<AuthUserDto>();
+        Assert.NotNull(updatedProfile);
+        Assert.Equal("Master Chef", updatedProfile.DisplayName);
+        Assert.Equal("https://cdn.culinary.test/avatar.png", updatedProfile.AvatarUrl);
+        Assert.Equal("Expert in Mediterranean recipes.", updatedProfile.Bio);
+    }
+
+    [Fact]
+    public async Task UpdateProfileWithInvalidDataReturnsUnprocessableEntity()
+    {
+        var client = CreateTestClient();
+        var loginBody = new { email = "existing@culinary.test", password = GetTestCredential() };
+        var loginResponse = await client.PostAsJsonAsync(new Uri("/api/v1/auth/login", UriKind.Relative), loginBody);
+        var authDto = await loginResponse.Content.ReadFromJsonAsync<AuthResponseDto>();
+        Assert.NotNull(authDto);
+
+        var patchBody = new
+        {
+            avatarUrl = "not-a-valid-uri",
+        };
+        var patchMsg = new HttpRequestMessage(HttpMethod.Patch, new Uri("/api/v1/auth/me", UriKind.Relative))
+        {
+            Content = JsonContent.Create(patchBody),
+        };
+        patchMsg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", authDto.AccessToken);
+
+        var patchResponse = await client.SendAsync(patchMsg);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, patchResponse.StatusCode);
+
+        var problem = await patchResponse.Content.ReadFromJsonAsync<ProblemDetails>();
+        Assert.NotNull(problem);
+        Assert.Equal("VALIDATION_ERROR", problem.Type);
+    }
+
+    [Fact]
     public async Task LogoutWithValidBearerTokenAndCookieRevokesTokenAndClearsCookie()
     {
         var client = CreateTestClient();
@@ -562,6 +639,11 @@ public sealed class AuthEndpointsTests : IClassFixture<AuthEndpointsTests.AuthEn
             string userId,
             CancellationToken cancellationToken = default)
         {
+            if (userId == "deleted-user-id")
+            {
+                return Task.FromResult<AuthUserDto?>(null);
+            }
+
             return Task.FromResult<AuthUserDto?>(new AuthUserDto(
                 userId,
                 "existing@culinary.test",

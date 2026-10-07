@@ -16,6 +16,7 @@ public static class DependencyInjection
         services.AddValidatorsFromAssembly(assembly, includeInternalTypes: true);
         services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
         services.AddMemoryCache();
+        services.AddScoped<CulinaryBlog.Application.Abstractions.Identity.IRecipeAuthorizationService, CulinaryBlog.Application.Auth.Services.RecipeAuthorizationService>();
 
         return services;
     }

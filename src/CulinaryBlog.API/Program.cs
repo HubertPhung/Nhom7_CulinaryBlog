@@ -65,6 +65,7 @@ builder.Services.AddAuthentication(options =>
 });
 
 builder.Services.AddAuthorization(Policies.ConfigureAuthorization);
+builder.Services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationHandler, RecipeAuthorizationHandler>();
 
 builder.Services.AddRateLimiter(options =>
 {
